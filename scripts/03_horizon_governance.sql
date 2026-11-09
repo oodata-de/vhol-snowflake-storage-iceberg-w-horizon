@@ -31,7 +31,7 @@ USE SCHEMA PUBLIC;
 -- PERSONALIZATION -- set your Snowflake username before running anything
 -- ---------------------------------------------------------------------------
 -- Must match the username used in 00_setup.sql.
-SET MY_USER = '<YOUR_SNOWFLAKE_USERNAME>';
+SET MY_USER = 'DECLOUD';
 
 -- ---------------------------------------------------------------------------
 -- SECTION 1: Confirm PATH A is clean (yellow_trips has NO policies)
@@ -120,6 +120,8 @@ CREATE OR REPLACE ROW ACCESS POLICY ICEBERG_DEMO.PUBLIC.borough_rls
 ALTER ICEBERG TABLE green_trips
     ADD ROW ACCESS POLICY ICEBERG_DEMO.PUBLIC.borough_rls ON (PULocationID);
 
+-- Policies are applied once and visible across all engines that query the data
+
 -- ---------------------------------------------------------------------------
 -- SECTION 3: Verify PATH B policies are attached to green_trips only
 -- ---------------------------------------------------------------------------
@@ -203,6 +205,7 @@ USE WAREHOUSE DEMO_WH;
 --   routed through Snowflake compute for server-side enforcement. This
 --   path will show credits consumed by the warehouse that executed the
 --   policy-enforced query on behalf of Databricks.
+-- For table-level access policies, no Snowflake warehouse is used to execute the query. For row access policies and column masking policies, currently yes.
 
 SELECT
     WAREHOUSE_NAME,

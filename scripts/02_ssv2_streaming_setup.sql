@@ -3,7 +3,8 @@
 -- 02_ssv2_streaming_setup.sql -- SSV2 Streaming Ingest + Iceberg V3 VARIANT (Module 2)
 -- =============================================================================
 -- Creates the nyc_weather_ssv2 Iceberg V3 table and the SSV2 pipe that
--- receives streamed rows from SSV2WeatherIngest.java.
+-- receives streamed rows from SSV2WeatherIngest.java (SSV provides up to 10gb per second and data querable within 5 seconds )
+-- No stagign area, no batch table. Application writes directly as a variant
 --
 -- Flow:
 --   1. Run this file to create the table and pipe.
@@ -48,11 +49,12 @@ COMMENT = 'NYC airport weather — streamed via SSV2 from Open-Meteo API';
 
 -- ---------------------------------------------------------------------------
 -- Create SSV2 pipe — end-to-end SSV2 (Snowpipe Streaming V2) data flow:
---   1. The external Java app (SSV2WeatherIngest.java) calls appendRow() to stream rows into this pipe
+--   1. The external Java app (SSV2WeatherIngest.java) calls appendRow() to stream rows into this pipe. Calls API for waether reports and stream response as row into target, no parsing
 --   2. DATA_SOURCE(TYPE => 'STREAMING') receives the in-memory rowset — no staging files involved
 --   3. The Java app sends the parsed JSON as a Map<String,Object> — the SDK writes it directly as VARIANT
 --   4. No PARSE_JSON needed — the pipe is a straight pass-through mapping
 -- ---------------------------------------------------------------------------
+
 CREATE OR REPLACE PIPE nyc_weather_ssv2_pipe
 AS COPY INTO nyc_weather_ssv2
 FROM (
@@ -115,7 +117,8 @@ ALTER SESSION SET USE_CACHED_RESULT = FALSE;
 ALTER WAREHOUSE DEMO_WH SUSPEND;
 ALTER WAREHOUSE DEMO_WH RESUME;
 USE WAREHOUSE DEMO_WH;
-SELECT * FROM ICEBERG_DEMO.PUBLIC.nyc_weather_ssv2;
+SELECT * FROM ICEBERG_DEMO.PUBLIC.nyc_weather_ssv2;  -- no pruning
+-- Bytes scanned 0.29MB
 
 ALTER SESSION SET USE_CACHED_RESULT = FALSE;
 ALTER WAREHOUSE DEMO_WH_2 RESUME;
@@ -123,7 +126,8 @@ USE WAREHOUSE DEMO_WH_2;
 SELECT
     location,
     weather_data:hourly_units:precipitation::STRING AS precip_unit
-FROM ICEBERG_DEMO.PUBLIC.nyc_weather_ssv2;
+FROM ICEBERG_DEMO.PUBLIC.nyc_weather_ssv2; -- with pruning
+-- Bytes scanned 0.20MB
 
 -- ---------------------------------------------------------------------------
 -- Raw VARIANT preview — see the full nested JSON before flattening

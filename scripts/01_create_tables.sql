@@ -40,9 +40,15 @@ USE SCHEMA PUBLIC;
 --   Databricks will receive vended credentials and read Parquet directly
 --   from Snowflake-managed storage -- zero Snowflake compute consumed.
 -- ---------------------------------------------------------------------------
+
+-- You don't pay for orphan files, metadata overhead, failed maintenance output + GET/PUT/LIST request charges. 
+-- In Snowflake Storage, you only pay for Active table data only — no orphaned file costs, no storage request charges from Snowflake compute.
+-- Snowflake Managed are Iceberg tables where the tables are managed by Horizon Catalog. Snowflake Storage is a managed storage solution, now supporting Iceberg Tables.
+
+
 CREATE OR REPLACE ICEBERG TABLE yellow_trips
-    CATALOG = SNOWFLAKE
-    EXTERNAL_VOLUME = SNOWFLAKE_MANAGED
+    CATALOG = SNOWFLAKE  -- table stored in horizon catalog
+    EXTERNAL_VOLUME = SNOWFLAKE_MANAGED  -- snowflake manages maintainence: compaction, lifecycle etc
     AS SELECT
         $1:VendorID::INT                      AS VendorID,
         TO_TIMESTAMP_NTZ($1:tpep_pickup_datetime::STRING)::TIMESTAMP_NTZ(6) AS tpep_pickup_datetime, -- Explicit microsecond precision for Spark 4.0/Iceberg 1.10.x compatibility
@@ -81,7 +87,7 @@ CREATE OR REPLACE ICEBERG TABLE green_trips
     EXTERNAL_VOLUME = SNOWFLAKE_MANAGED
     AS SELECT
         $1:VendorID::INT                      AS VendorID,
-        TO_TIMESTAMP_NTZ($1:lpep_pickup_datetime::STRING)::TIMESTAMP_NTZ(6) AS lpep_pickup_datetime, -- Explicit microsecond precision for Spark 4.0/Iceberg 1.10.x compatibility
+        TO_TIMESTAMP_NTZ($1:lpep_pickup_datetime::STRING)::TIMESTAMP_NTZ(6) AS lpep_pickup_datetime, -- Explicit microsecond (6 precision) precision for Spark 4.0/Iceberg 1.10.x compatibility
         TO_TIMESTAMP_NTZ($1:lpep_dropoff_datetime::STRING)::TIMESTAMP_NTZ(6) AS lpep_dropoff_datetime,
         $1:passenger_count::INT               AS passenger_count,
         $1:trip_distance::FLOAT               AS trip_distance,
@@ -104,6 +110,11 @@ CREATE OR REPLACE ICEBERG TABLE green_trips
 
 -- Count Check
 SELECT COUNT(*) AS green_row_count FROM green_trips;
+
+SELECT DISTINCT FILE_NAME, FILE_SIZE, ROW_COUNT, ROW_GROUP_COUNT, MD5
+FROM TABLE(INFORMATION_SCHEMA.ICEBERG_TABLE_FILES(
+    TABLE_NAME => 'green_trips'
+));
 
 -- ---------------------------------------------------------------------------
 -- green_trips_nano: Nanosecond timestamp proof table
@@ -135,7 +146,7 @@ SELECT COUNT(*) AS green_nano_row_count FROM green_trips_nano;
 
 SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION('green_trips_nano') AS nano_metadata;
 
-SELECT * FROM green_trips_nano LIMIT 5;
+SELECT * FROM green_trips_nano LIMIT 5;  -- value for tz: 2026-01-01 00:27:58.000 (nano)
 
 -- ---------------------------------------------------------------------------
 -- zone_lookup: dimension table (regular Snowflake table, not Iceberg)
@@ -163,7 +174,7 @@ SELECT COUNT(*) AS zone_count FROM zone_lookup;
 -- ---------------------------------------------------------------------------
 -- Confirm FORMAT_VERSION=3 and metadataLocation points to SF-managed storage (not a customer bucket)
 
-SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION('yellow_trips') AS yellow_metadata;
+SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION('yellow_trips') AS yellow_metadata;  -- the bucket is provision by snowflake and its transparent
 
 -- Same check for green_trips: expect FORMAT_VERSION=3 and SF-managed metadataLocation
 SELECT SYSTEM$GET_ICEBERG_TABLE_INFORMATION('green_trips')  AS green_metadata;
